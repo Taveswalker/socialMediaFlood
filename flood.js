@@ -1,7 +1,12 @@
-const cheerio = require('cheerio');
+const nodeInstagram = require('node-instagram');
 const nodeMailer = require('nodemailer');
 const twit = require('twit');
-const credentials = require('./credentials.json')
+const credentials = require('./credentials.json');
+const Nexmo = require('nexmo');
+const nexmo = new Nexmo({
+    apiKey: credentials.sms.apiKey,
+    apiSecret: credentials.sms.apiSecret
+})
 const transporter = nodeMailer.createTransport({
     service: 'gmail',
     auth: {
@@ -15,27 +20,50 @@ const client = new twit({
     access_token: credentials.twitter.access_token_key,
     access_token_secret: credentials.twitter.access_token_secret
 });
+// const instagram = new nodeInstagram({
+//     clientId: credentials.instagram.clientId,
+//     clientSecret: credentials.instagram.clientSecret,
+//     accessToken: credentials.instagram.accessToken,
+// });
 
-
-
-export async function messageTwitter(message, recipient){
-    client.post('direct_messages/events/new', {
-        event: {
-            type: "message_create",
-            message_create: {
-                target: {
-                    recipient_id: recipient
-                },
-                message_data: {
-                    text: message
-                }
+export async function messageSMS(message, recipient){
+    nexmo.message.sendSms(credentials.sms.sender,recipient, message,(err, responseData) => {
+        if (err) {
+            console.log(err);
+        } else {
+            if(responseData.messages[0]['status'] === "0") {
+                console.log("Message sent successfully.");
+            } else {
+                console.log(`Message failed with error: ${responseData.messages[0]['error-text']}`);
             }
         }
-    }, (event, error)=>{
-            console.log(event);
-            console.log(error)
     })
 }
+
+export function messageTwitter(message, recipient){
+    getTwitterID(recipient, id=> {
+        client.post('direct_messages/events/new', {
+            event: {
+                type: "message_create",
+                message_create: {
+                    target: {
+                        recipient_id: id
+                    },
+                    message_data: {
+                        text: message
+                    }
+                }
+            }
+        }, (err, event) => {
+            if(err){
+                console.log(err)
+            } else{
+                console.log(`Success, Twitter direct message sent to ${recipient}`)
+            }
+        })
+    })
+}
+
 
 
 export async function emailSend(message, recipient){
@@ -43,7 +71,7 @@ export async function emailSend(message, recipient){
         {
                 from: credentials.gmail.username,
                 to: recipient,
-                subject: 'Sending Email using Node.js',
+                subject: '',
                 text: message
         },
         function(error, info){
@@ -57,21 +85,21 @@ export async function emailSend(message, recipient){
 
 
 
-export async function messageInstagram(){
-    const $ = cheerio.load('https://www.instagram.com/accounts/login/?source=auth_switcher');
-    console.log($('._2hvTZ pexuQ zyHYP').html());
+// export async function messageInstagram(){
+//     instagram.post('')
+//
+// }
 
-}
-
-function getTwitterID(rec) {
+export function getTwitterID(rec,callback) {
     client.get('users/show', {
         screen_name: rec
     }, (error, response) => {
         if (error) {
             console.log(error)
         }
-        console.log(response.id_str)
-        return response.id_str
+        callback(response.id_str)
+        // console.log(response.id_str)
+        // return response.id_str
     })
 }
 
